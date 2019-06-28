@@ -128,7 +128,7 @@ namespace Microsoft.PythonTools.TestAdapter {
                             if (discoverer == null) {
                                 continue;
                             }
-
+                            
                             ProjectInfo projInfo = null; 
                             LaunchConfiguration config = null;
                             ThreadHelper.JoinableTaskFactory.Run(async () => {
@@ -156,6 +156,7 @@ namespace Microsoft.PythonTools.TestAdapter {
                                 );
                                 continue;
                             }
+                            writer.WriteAttributeString("isWorkspace", discoverer.IsWorkspace.ToString());
                             writer.WriteAttributeString("nativeDebugging", nativeCode);
                             writer.WriteAttributeString("djangoSettingsModule", djangoSettings);
 
