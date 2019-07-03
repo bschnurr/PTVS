@@ -18,16 +18,13 @@ using System;
 using System.ComponentModel.Composition;
 using System.IO;
 using System.Linq;
-using System.Windows.Threading;
 using System.Xml.XPath;
 using Microsoft.PythonTools.Infrastructure;
 using Microsoft.PythonTools.Interpreter;
 using Microsoft.PythonTools.TestAdapter.Model;
 using Microsoft.VisualStudio.ComponentModelHost;
 using Microsoft.VisualStudio.Shell;
-using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio.TestWindow.Extensibility;
-using Microsoft.VisualStudioTools;
 using Microsoft.VisualStudioTools.TestAdapter;
 
 namespace Microsoft.PythonTools.TestAdapter {
@@ -122,8 +119,8 @@ namespace Microsoft.PythonTools.TestAdapter {
                             writer.WriteStartElement("Project");
                             writer.WriteAttributeString("home", container.Project);
                             
-                            string nativeCode = "", djangoSettings = "", pytestEnabled = "", pytestPath = "", pytestArgs = "";
-
+                            string nativeCode = "", djangoSettings = "", pytestPath = "", pytestArgs = "";
+                            bool pytestEnabled = false;
                             TestContainerDiscoverer discoverer = container.Discoverer as TestContainerDiscoverer;
                             if (discoverer == null) {
                                 continue;
@@ -133,20 +130,19 @@ namespace Microsoft.PythonTools.TestAdapter {
                             LaunchConfiguration config = null;
                             ThreadHelper.JoinableTaskFactory.Run(async () => {
                                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                                projInfo = discoverer.GetProjectInfo(container.Project);
 
-                                if(projInfo == null) {
-                                    return;
+                                projInfo = discoverer.GetProjectInfo(container.Project);
+                                if (projInfo != null) {
+                                    try {
+                                        config = projInfo.GetLaunchConfigurationOrThrow();
+                                    } catch {
+                                    }
+                                    nativeCode = projInfo.GetProperty(PythonConstants.EnableNativeCodeDebugging);
+                                    djangoSettings = projInfo.GetProperty("DjangoSettingsModule");
+                                    pytestEnabled = projInfo.GetBoolProperty(PythonConstants.PyTestEnabledSetting).GetValueOrDefault(false);
+                                    pytestPath = projInfo.GetProperty(PythonConstants.PyTestPathSetting);
+                                    pytestArgs = projInfo.GetProperty(PythonConstants.PyTestArgsSetting);
                                 }
-                                try {
-                                    config = projInfo.GetLaunchConfigurationOrThrow();
-                                } catch {
-                                }
-                                nativeCode = projInfo.GetProperty(PythonConstants.EnableNativeCodeDebugging);
-                                djangoSettings = projInfo.GetProperty("DjangoSettingsModule");
-                                pytestEnabled = projInfo.GetProperty(PythonConstants.PyTestEnabledSetting);
-                                pytestPath = projInfo.GetProperty(PythonConstants.PyTestPathSetting);
-                                pytestArgs = projInfo.GetProperty(PythonConstants.PyTestArgsSetting);
                             });
 
                             if (config == null || projInfo == null) {
@@ -160,7 +156,7 @@ namespace Microsoft.PythonTools.TestAdapter {
                             writer.WriteAttributeString("nativeDebugging", nativeCode);
                             writer.WriteAttributeString("djangoSettingsModule", djangoSettings);
 
-                            writer.WriteAttributeString("pytestEnabled", pytestEnabled);
+                            writer.WriteAttributeString("pytestEnabled", pytestEnabled.ToString());
                             writer.WriteAttributeString("pytestPath", pytestPath);
                             writer.WriteAttributeString("pytestArgs", pytestArgs);
 
