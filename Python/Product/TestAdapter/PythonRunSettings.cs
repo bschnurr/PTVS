@@ -121,17 +121,23 @@ namespace Microsoft.PythonTools.TestAdapter {
                             
                             string nativeCode = "", djangoSettings = "", pytestPath = "", pytestArgs = "";
                             bool pytestEnabled = false;
-                            TestContainerDiscoverer discoverer = container.Discoverer as TestContainerDiscoverer;
-                            if (discoverer == null) {
-                                continue;
-                            }
-                            
-                            ProjectInfo projInfo = null; 
+                            bool isWorkspace = false;
+                            ProjectInfo projInfo = null;
                             LaunchConfiguration config = null;
+                                       
                             ThreadHelper.JoinableTaskFactory.Run(async () => {
                                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
-                                projInfo = discoverer.GetProjectInfo(container.Project);
+                                if (container.Discoverer is TestContainerDiscoverer) {
+                                    var discoverer = container.Discoverer as TestContainerDiscoverer;
+                                    isWorkspace = discoverer.IsWorkspace;
+                                    projInfo = discoverer.GetProjectInfo(container.Project);
+                                } else if (container.Discoverer is WSTestContainerDiscoverer) {
+                                    var discoverer = container.Discoverer as WSTestContainerDiscoverer;
+                                    isWorkspace = discoverer.IsWorkspace;
+                                    projInfo = discoverer.GetProjectInfo(container.Project);
+                                }
+
                                 if (projInfo != null) {
                                     try {
                                         config = projInfo.GetLaunchConfigurationOrThrow();
@@ -152,7 +158,7 @@ namespace Microsoft.PythonTools.TestAdapter {
                                 );
                                 continue;
                             }
-                            writer.WriteAttributeString("isWorkspace", discoverer.IsWorkspace.ToString());
+                            writer.WriteAttributeString("isWorkspace", isWorkspace.ToString());
                             writer.WriteAttributeString("nativeDebugging", nativeCode);
                             writer.WriteAttributeString("djangoSettingsModule", djangoSettings);
 
