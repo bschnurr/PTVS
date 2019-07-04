@@ -118,8 +118,8 @@ namespace Microsoft.PythonTools.TestAdapter {
                         foreach (var container in project) {
                             writer.WriteStartElement("Project");
                             writer.WriteAttributeString("home", container.Project);
-                            
-                            string nativeCode = "", djangoSettings = "", pytestPath = "", pytestArgs = "";
+
+                            string nativeCode = "", djangoSettings = "", pytestPath = "", pytestArgs = "", projectName = "";
                             bool pytestEnabled = false;
                             bool isWorkspace = false;
                             ProjectInfo projInfo = null;
@@ -148,6 +148,7 @@ namespace Microsoft.PythonTools.TestAdapter {
                                     pytestEnabled = projInfo.GetBoolProperty(PythonConstants.PyTestEnabledSetting).GetValueOrDefault(false);
                                     pytestPath = projInfo.GetProperty(PythonConstants.PyTestPathSetting);
                                     pytestArgs = projInfo.GetProperty(PythonConstants.PyTestArgsSetting);
+                                    projectName = projInfo.ProjectName;
                                 }
                             });
 
@@ -158,6 +159,7 @@ namespace Microsoft.PythonTools.TestAdapter {
                                 );
                                 continue;
                             }
+                            writer.WriteAttributeString("name", projectName);
                             writer.WriteAttributeString("isWorkspace", isWorkspace.ToString());
                             writer.WriteAttributeString("nativeDebugging", nativeCode);
                             writer.WriteAttributeString("djangoSettingsModule", djangoSettings);
