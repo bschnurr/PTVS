@@ -429,7 +429,7 @@ namespace Microsoft.PythonTools.Debugger {
         /// to give time to attach to debugger events.  This waits for the debuggee
         /// to connect to the socket.
         /// </summary>
-        public async Task StartListeningAsync(int timeOutMs = 20000) {
+        public async Task StartListeningAsync(int timeOutMs = 200000) {
             if (!_connectedEvent.WaitOne(timeOutMs)) {
                 throw new ConnectionException(ConnErrorMessages.TimeOut);
             }

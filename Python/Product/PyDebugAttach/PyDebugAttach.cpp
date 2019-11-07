@@ -21,6 +21,7 @@
 #include "PyDebugAttach.h"
 #include "..\VsPyProf\python.h"
 #include <algorithm>
+#include <codecvt>
 
 // _Always_ is not defined for all versions, so make it a no-op if missing.
 #ifndef _Always_
@@ -28,6 +29,11 @@
 #endif
 
 using namespace std;
+
+typedef struct {
+    int cf_flags;  /* bitmask of CO_xxx flags relevant to future */
+} PyCompilerFlags;
+
 
 typedef int (Py_IsInitialized)();
 typedef void (PyEval_Lock)(); // Acquire/Release lock
@@ -41,6 +47,7 @@ typedef PyObject* (PyDict_New)();
 typedef PyObject* (PyModule_New)(const char *name);
 typedef PyObject* (PyModule_GetDict)(PyObject *module);
 typedef PyObject* (Py_CompileString)(const char *str, const char *filename, int start);
+typedef PyObject* (Py_CompileStringExFlags)(const char* str, const char* filename, int start, PyCompilerFlags* flags, int optimize);
 typedef PyObject* (PyEval_EvalCode)(PyObject *co, PyObject *globals, PyObject *locals);
 typedef PyObject* (PyDict_GetItemString)(PyObject *p, const char *key);
 typedef PyObject* (PyObject_CallFunctionObjArgs)(PyObject *callable, ...);    // call w/ varargs, last arg should be NULL
@@ -672,7 +679,7 @@ public:
 
 bool LoadAndEvaluateCode(
     wchar_t* filePath, const char* fileName, ConnectionInfo& connInfo, bool isDebug, PyObject* globalsDict,
-    Py_CompileString* pyCompileString, PyDict_SetItemString* dictSetItem,
+    Py_CompileString* pyCompileString, Py_CompileStringExFlags* pyPy_CompileStringExFlags, PyDict_SetItemString* dictSetItem,
     PyEval_EvalCode* pyEvalCode, PyString_FromString* strFromString, PyEval_GetBuiltins* getBuiltins,
     PyErr_Print pyErrPrint
  ) {
@@ -684,20 +691,33 @@ bool LoadAndEvaluateCode(
     }
     
     auto debuggerCode = fileContents.data();
-    auto code = PyObjectHolder(isDebug, pyCompileString(debuggerCode, fileName, 257 /*Py_file_input*/));
+    auto code = (pyCompileString != nullptr) ? PyObjectHolder(isDebug, pyCompileString(debuggerCode, fileName, 257 /*Py_file_input*/)) :
+        PyObjectHolder(isDebug, pyPy_CompileStringExFlags(debuggerCode, fileName, 257 /*Py_file_input*/, nullptr, -1));
 
     if (*code == nullptr) {
         connInfo.ReportErrorAfterAttachDone(ConnError_LoadDebuggerFailed);
         return false;
     }
-
-    dictSetItem(globalsDict, "__builtins__", getBuiltins());
-    auto size = WideCharToMultiByte(CP_UTF8, 0, filePath, (DWORD)wcslen(filePath), NULL, 0, NULL, NULL);
-    char* filenameBuffer = new char[size + 1];
-    if (WideCharToMultiByte(CP_UTF8, 0, filePath, (DWORD)wcslen(filePath), filenameBuffer, size, NULL, NULL) != 0) {
-        filenameBuffer[size] = 0;
-        dictSetItem(globalsDict, "__file__", strFromString(filenameBuffer));
+    
+    if (dictSetItem(globalsDict, "__builtins__", getBuiltins()) != 0) {
+        return false;
     }
+
+    std::wstring_convert<std::codecvt_utf8<wchar_t>> conv;
+    std::string u8str = conv.to_bytes(filePath);
+    
+    if (dictSetItem(globalsDict, "__file__", strFromString(u8str.c_str())) != 0) {
+        return false;
+    }
+
+  /*  auto size = WideCharToMultiByte(CP_UTF8, 0, filePath, (DWORD)wcslen(filePath), NULL, 0, NULL, NULL);
+    
+    std::string filenameBuffer(size, 0);
+    if (WideCharToMultiByte(CP_UTF8, 0, filePath, (DWORD)wcslen(filePath), filenameBuffer, size, NULL, NULL) != 0) {
+        if (dictSetItem(globalsDict, "__file__", strFromString(filenameBuffer.c_str())) != 0) {
+            return false;
+        }
+    }*/
 
     auto evalResult = PyObjectHolder(isDebug, pyEvalCode(code.ToPython(), globalsDict, globalsDict));
 #if !NDEBUG
@@ -745,11 +765,13 @@ bool DoAttach(HMODULE module, ConnectionInfo& connInfo, bool isDebug) {
         auto threadSwap = (PyThreadState_Swap*)GetProcAddress(module, "PyThreadState_Swap");
         auto pyDictNew = (PyDict_New*)GetProcAddress(module, "PyDict_New");
         auto pyCompileString = (Py_CompileString*)GetProcAddress(module, "Py_CompileString");
+        auto py_CompileStringExFlags = (Py_CompileStringExFlags*)GetProcAddress(module, "Py_CompileStringExFlags");
         auto pyEvalCode = (PyEval_EvalCode*)GetProcAddress(module, "PyEval_EvalCode");
         auto getDictItem = (PyDict_GetItemString*)GetProcAddress(module, "PyDict_GetItemString");
         auto call = (PyObject_CallFunctionObjArgs*)GetProcAddress(module, "PyObject_CallFunctionObjArgs");
         auto getBuiltins = (PyEval_GetBuiltins*)GetProcAddress(module, "PyEval_GetBuiltins");
         auto dictSetItem = (PyDict_SetItemString*)GetProcAddress(module, "PyDict_SetItemString");
+        
         PyInt_FromLong* intFromLong;
         PyString_FromString* strFromString;
         PyInt_FromSize_t* intFromSizeT;
@@ -795,11 +817,12 @@ bool DoAttach(HMODULE module, ConnectionInfo& connInfo, bool isDebug) {
 
         if (addPendingCall == nullptr || interpHead == nullptr || gilEnsure == nullptr || gilRelease == nullptr || threadHead == nullptr ||
             initThreads == nullptr || releaseLock == nullptr || threadsInited == nullptr || threadNext == nullptr || threadSwap == nullptr ||
-            pyDictNew == nullptr || pyCompileString == nullptr || pyEvalCode == nullptr || getDictItem == nullptr || call == nullptr ||
+            pyDictNew == nullptr || pyEvalCode == nullptr || getDictItem == nullptr || call == nullptr ||
             getBuiltins == nullptr || dictSetItem == nullptr || intFromLong == nullptr || pyErrRestore == nullptr || pyErrFetch == nullptr ||
             errOccurred == nullptr || pyImportMod == nullptr || pyGetAttr == nullptr || pyNone == nullptr || pySetAttr == nullptr || boolFromLong == nullptr ||
             getThreadTls == nullptr || setThreadTls == nullptr || delThreadTls == nullptr || pyObjectRepr == nullptr || pyUnicodeAsWideChar == nullptr ||
-            (curPythonThread == nullptr && getPythonThread == nullptr)) {
+            (curPythonThread == nullptr && getPythonThread == nullptr) ||
+            (pyCompileString == nullptr && py_CompileStringExFlags == nullptr)) {
                 // we're missing some APIs, we cannot attach.
                 connInfo.ReportError(ConnError_PythonNotFound);
                 return false;
@@ -995,7 +1018,7 @@ bool DoAttach(HMODULE module, ConnectionInfo& connInfo, bool isDebug) {
         auto globalsDict = PyObjectHolder(isDebug, pyDictNew());
 
         if (!LoadAndEvaluateCode(ptvsdLoaderPath, "ptvsd_loader.py", connInfo, isDebug, globalsDict.ToPython(),
-                pyCompileString, dictSetItem, pyEvalCode, strFromString, getBuiltins, pyErrPrint)) {
+                pyCompileString, py_CompileStringExFlags, dictSetItem, pyEvalCode, strFromString, getBuiltins, pyErrPrint)) {
             return false;
         }
 
