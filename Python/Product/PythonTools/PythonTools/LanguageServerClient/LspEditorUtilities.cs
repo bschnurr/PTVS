@@ -22,10 +22,12 @@ using Microsoft.VisualStudio.Text.Editor;
 namespace Microsoft.PythonTools.LanguageServerClient {
     internal static class LspEditorUtilities {
         internal static SnapshotPoint GetSnapshotPositionFromProtocolPosition(this ITextSnapshot textSnapshot, Position position) {
-            var line = textSnapshot.GetLineNumberFromPosition(position.Line);
-            var snapshotPosition = textSnapshot.GetLineFromLineNumber(position.Line).Start + position.Character;
+            if (position.Line < textSnapshot.LineCount) {
+                var snapshotPosition = textSnapshot.GetLineFromLineNumber(position.Line).Start + position.Character;
+                return new SnapshotPoint(textSnapshot, snapshotPosition);
+            }
 
-            return new SnapshotPoint(textSnapshot, snapshotPosition);
+            return new SnapshotPoint(textSnapshot, textSnapshot.Length);
         }
 
         internal static SnapshotPoint? GetPointAtSubjectBuffer(this ITextView textView, SnapshotPoint point, ITextBuffer textBuffer) {
