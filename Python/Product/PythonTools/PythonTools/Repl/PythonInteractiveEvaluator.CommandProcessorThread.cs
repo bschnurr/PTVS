@@ -127,6 +127,7 @@ namespace Microsoft.PythonTools.Repl {
 
             args.Add("--execution-mode");
             args.Add(string.IsNullOrEmpty(BackendName) ? "standard" : BackendName);
+            args.Add("--enable-attach");
 
             processInfo.Arguments = string.Join(" ", args);
 

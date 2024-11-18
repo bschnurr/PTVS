@@ -30,8 +30,8 @@ import sys
 import threading
 import time
 import traceback
-from ptvsd.repl import BasicReplBackend, ReplBackend, UnsupportedReplException, _command_line_to_args_list, DEBUG
-from ptvsd.util import to_bytes
+from repl import BasicReplBackend, ReplBackend, UnsupportedReplException, _command_line_to_args_list, DEBUG
+from util import to_bytes
 
 try:
     import jupyter_client
@@ -228,7 +228,7 @@ class JupyterClientBackend(ReplBackend):
             # TODO: Better fatal error handling
             traceback.print_exc()
             try:
-                raw_input()
+                input()
             except NameError:
                 input()
             raise
@@ -258,15 +258,18 @@ class JupyterClientBackend(ReplBackend):
 
     def run_command(self, command):
         """runs the specified command which is a string containing code"""
-        if self.__client:
-            with self.__lock:
-                self.__exec(command, store_history=True, silent=False).append(self.__command_executed)
-            return True
+        if self.__client is None:
+            raise RuntimeError("Jupyter client is not initialized. in run_command")
+        with self.__lock:
+            self.__exec(command, store_history=True, silent=False).append(self.__command_executed)
+        return True
 
         self.__cmd_buffer.append(command)
         return False
 
     def __exec(self, command, store_history=False, allow_stdin=False, silent=True, get_vars=None):
+        if self.__client is None:
+            raise RuntimeError("Jupyter client is not initialized. in __exec")
         with self.__lock:
             msg_id = self.__client.execute(
                 command,
@@ -413,7 +416,7 @@ class JupyterClientBackend(ReplBackend):
             # TODO: Better fatal error handling
             traceback.print_exc()
             try:
-                raw_input()
+                input()
             except NameError:
                 input()
             self.exit_process()
@@ -471,7 +474,7 @@ class JupyterClientBackend(ReplBackend):
             try:
                 if isinstance(output_xaml, str) and sys.version_info[0] >= 3:
                     output_xaml = output_xaml.encode('ascii')
-                self.write_xaml(base64.decodestring(output_xaml))
+                self.write_xaml(base64.b64decode(output_xaml))
                 self.write_stdout('\n')
                 return
             except Exception:
@@ -483,7 +486,7 @@ class JupyterClientBackend(ReplBackend):
             try:
                 if isinstance(output_png, str) and sys.version_info[0] >= 3:
                     output_png = output_png.encode('ascii')
-                self.write_png(base64.decodestring(output_png))
+                self.write_png(base64.b64decode(output_png))
                 self.write_stdout('\n')
                 return
             except Exception:

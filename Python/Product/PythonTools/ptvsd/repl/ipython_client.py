@@ -19,19 +19,21 @@
 __author__ = "Microsoft Corporation <ptvshelp@microsoft.com>"
 __version__ = "3.2.1.0"
 
+import os
 import re
 import sys
-from ptvsd.repl import BasicReplBackend, ReplBackend, UnsupportedReplException, _command_line_to_args_list
-from ptvsd.util import to_bytes
-try:
-    import thread
-except:
-    import _thread as thread    # Renamed as Py3k
+from typing import Type
 
-try:
-    from base64 import decodestring
-except:
-    from base64 import decodebytes as decodestring # Deprecated in 3.9
+from jupyter_client.client import KernelClient
+from repl import BasicReplBackend, ReplBackend, UnsupportedReplException, _command_line_to_args_list, unicode
+from jupyter_client.manager import KernelManager
+from jupyter_client.channels import HBChannel, ZMQSocketChannel
+
+from util import to_bytes
+
+import threading
+
+from base64 import decodebytes as decodestring # Deprecated in 3.9
 
 try:
     import IPython
@@ -53,28 +55,15 @@ def is_ipython_versionorgreater(major, minor):
 
 remove_escapes = re.compile(r'\x1b[^m]*m')
 
-try:
-    if is_ipython_versionorgreater(3, 0):
-        from IPython.kernel import KernelManager
-        from IPython.kernel.channels import HBChannel
-        from IPython.kernel.threaded import (ThreadedZMQSocketChannel, ThreadedKernelClient as KernelClient)
-        ShellChannel = StdInChannel = IOPubChannel = ThreadedZMQSocketChannel
-    elif is_ipython_versionorgreater(1, 0):
-        from IPython.kernel import KernelManager, KernelClient
-        from IPython.kernel.channels import ShellChannel, HBChannel, StdInChannel, IOPubChannel
-    else:
-        import IPython.zmq
-        KernelClient = object # was split out from KernelManager in 1.0
-        from IPython.zmq.kernelmanager import (KernelManager, 
-                                               ShellSocketChannel as ShellChannel, 
-                                               SubSocketChannel as IOPubChannel, 
-                                               StdInSocketChannel as StdInChannel, 
-                                               HBSocketChannel as HBChannel)
 
-    from IPython.utils.traitlets import Type
-except ImportError:
-    exc_value = sys.exc_info()[1]
-    raise UnsupportedReplException(str(exc_value))
+try:
+        # For Jupyter Client >= 6.0, the API is unified under `jupyter_client`
+        ShellChannel = ZMQSocketChannel
+        IOPubChannel = ZMQSocketChannel
+        StdInChannel = ZMQSocketChannel
+        HBChannel = HBChannel
+except ImportError as e:
+    raise RuntimeError("Jupyter Client or required channels are not installed: " + str(e))
 
 
 # TODO: SystemExit exceptions come back to us as strings, can we automatically exit when ones raised somehow?
@@ -251,7 +240,8 @@ class VsStdInChannel(DefaultHandler, StdInChannel):
         
             self.input(value)
             
-        thread.start_new_thread(read_and_respond, ())
+        thread = threading.Thread(target=read_and_respond)
+        thread.start()
 
 
 class VsHBChannel(DefaultHandler, HBChannel):
@@ -284,10 +274,12 @@ class IPythonBackend(ReplBackend):
             self.km.start_kernel(**{'extra_arguments': self.get_extra_arguments()})
         else:
             self.km.start_kernel(**{'ipython': True, 'extra_arguments': self.get_extra_arguments()})
+        
         self.km.start_channels()
-        self.exit_lock = thread.allocate_lock()
+
+        self.exit_lock = threading.Lock()
         self.exit_lock.acquire()     # used as an event
-        self.members_lock = thread.allocate_lock()
+        self.members_lock = threading.Lock()
         self.members_lock.acquire()
         
         self.km.shell_channel._vs_backend = self
@@ -402,31 +394,35 @@ exec(compile(%(contents)r, %(filename)r, 'exec'))
     def flush(self):
         pass
 
-    def init_debugger(self):
-        from os import path
-        self.run_command('''
-def __visualstudio_debugger_init():    
+def init_debugger(self):
     import sys
+    import debugpy
+    from os import path
+    
+    # Set logging directory
+    os.environ["DEBUGPY_LOG_DIR"] = "./debugpy_logs"
+
+    debugpy.log_to("debugpy.log")
     sys.path.append(''' + repr(path.dirname(__file__)) + ''')
-    import ptvsd.debugger
-    new_thread = ptvsd.debugger.new_thread()
-    sys.settrace(new_thread.trace_func)
-    ptvsd.debugger.intercept_threads(True)
+    
+    # Configure the debugger    
+    debugpy.listen(('127.0.0.1', 5678))  # Replace 5678 with your desired debug port if necessary
+    print("Waiting for debugger to attach...")
+    debugpy.wait_for_client()
+    print("Debugger is attached.")
 
-__visualstudio_debugger_init()
-del __visualstudio_debugger_init
-''', True)
 
-    def attach_process(self, port, debugger_id):
-        self.run_command('''
+def attach_process(self, port, debugger_id):
+    self.run_command(f'''
 def __visualstudio_debugger_attach():
-    import ptvsd.debugger
+    import debugpy
 
-    def do_detach():
-        ptvsd.debugger.DETACH_CALLBACKS.remove(do_detach)
-
-    ptvsd.debugger.DETACH_CALLBACKS.append(do_detach)
-    ptvsd.debugger.attach_process(''' + str(port) + ''', ''' + repr(debugger_id) + ''', report = True, block = True)
+    # Attach to the process
+    try:
+        debugpy.connect(('127.0.0.1', 5678))
+        print(f"Attached to process with debugger ID: {debugger_id}")
+    except Exception as e:
+        print(f"Failed to attach debugger: {e}")
 
 __visualstudio_debugger_attach()
 del __visualstudio_debugger_attach
