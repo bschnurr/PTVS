@@ -24,11 +24,8 @@ __version__ = "3.2.1.0"
 # hasn't been loaded already, it will assume that the thread on which it is being loaded is the
 # main thread. This will cause issues when the thread goes away after attach completes.
 
-try:
-    import thread
-except ImportError:
-    # Renamed in Python3k
-    import _thread as thread
+
+import threading
 try:
     from ssl import SSLError
 except:
@@ -38,15 +35,13 @@ import sys
 import socket
 import select
 import time
-import struct
 import imp
 import traceback
-import random
 import os
 import inspect
 import types
-from collections import deque
 import ptvsd.util as _vspu
+from socket import error as SocketError
 
 to_bytes = _vspu.to_bytes
 read_bytes = _vspu.read_bytes
@@ -56,16 +51,8 @@ write_bytes = _vspu.write_bytes
 write_int = _vspu.write_int
 write_string = _vspu.write_string
 
-try:
-    unicode
-except NameError:
-    unicode = str
-
-try:
-    BaseException
-except NameError:
-    # BaseException not defined until Python 2.5
-    BaseException = Exception
+unicode = str
+BaseException = Exception
 
 DEBUG = os.environ.get('DEBUG_REPL') or os.environ.get('_PTVS_DEBUG_REPL')
 
@@ -73,14 +60,16 @@ __all__ = ['ReplBackend', 'BasicReplBackend', 'BACKEND']
 
 def _debug_write(out):
     if DEBUG:
-        sys.__stdout__.write(out)
-        sys.__stdout__.flush()
+        if sys.__stdout__ is not None:
+            sys.__stdout__.write(out)
+            sys.__stdout__.flush()
 
 
 class SafeSendLock(object):
     """a lock which ensures we're released if we take a KeyboardInterrupt exception acquiring it"""
     def __init__(self):
-        self.lock = thread.allocate_lock()
+        
+        self.lock = threading.Lock()
 
     def __enter__(self):
         self.acquire()
@@ -138,7 +127,7 @@ class UnsupportedReplException(Exception):
         self.reason = reason
 
 # save the start_new_thread so we won't debug/break into the REPL comm thread.
-start_new_thread = thread.start_new_thread
+start_new_thread = threading.Thread
 class ReplBackend(object):
     """back end for executing REPL code.  This base class handles all of the 
 communication with the remote process while derived classes implement the 
@@ -165,7 +154,6 @@ actual inspection and introspection."""
     _MODC = to_bytes('MODC')
 
     def __init__(self, *args, **kwargs):
-        import threading
         self.conn = None
         self.send_lock = SafeSendLock()
         self.input_event = threading.Lock()
@@ -178,11 +166,13 @@ actual inspection and introspection."""
         self.conn.connect(('127.0.0.1', port))
 
         # start a new thread for communicating w/ the remote process
-        start_new_thread(self._repl_loop, ())
+        start_new_thread(target=self._repl_loop).start()
+
+        
 
     def connect_using_socket(self, socket):
         self.conn = socket
-        start_new_thread(self._repl_loop, ())
+        start_new_thread(target=self._repl_loop).start()
 
     def _repl_loop(self):
         """loop on created thread which processes communicates with the REPL window"""    
@@ -195,7 +185,8 @@ actual inspection and introspection."""
                 # has it's own format which we must parse before continuing to
                 # the next command.
                 self.flush()                
-                self.conn.settimeout(10)
+                if self.conn is not None:
+                    self.conn.settimeout(10)
 
                 # 2.x raises SSLError in case of timeout (http://bugs.python.org/issue10272)
                 if SSLError:
@@ -211,7 +202,8 @@ actual inspection and introspection."""
                         raise
                     continue
 
-                self.conn.settimeout(None)
+                if self.conn is not None:
+                    self.conn.settimeout(None)
                 if inp == '':
                     break
                 self.flush()
@@ -623,7 +615,7 @@ due to the exec, so we do it here"""
 
     def execute_code_work_item(self):
         _debug_write('Executing: ' + repr(self.current_code))
-        stripped_code = self.current_code.strip()
+        stripped_code = self.current_code.strip() if self.current_code else ''
         if stripped_code:
             if sys.platform == 'cli':
                 code_to_send = ''
@@ -803,7 +795,7 @@ due to the exec, so we do it here"""
                 # IronPython doesn't get thread.interrupt_main until 2.7.1
                 self.main_thread.Abort(ReplAbortException())
             else:
-                thread.interrupt_main()
+                import _thread; _thread.interrupt_main()
 
     def exit_process(self):
         self.execute_item = exit_work_item

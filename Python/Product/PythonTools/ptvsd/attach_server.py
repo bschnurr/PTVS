@@ -27,10 +27,8 @@ import struct
 import sys
 import threading
 import traceback
-try:
-    import thread
-except ImportError:
-    import _thread as thread
+
+import _thread as thread
 try:
     import ssl
 except ImportError:

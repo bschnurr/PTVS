@@ -22,7 +22,7 @@ __version__ = "3.2.1.0"
 # hasn't been loaded already, it will assume that the thread on which it is being loaded is the
 # main thread. This will cause issues when the thread goes away after attach completes.
 
-import imp
+import importlib.util
 import os
 import sys
 import struct
@@ -72,7 +72,8 @@ def exec_code(code, file, global_variables):
 
     global_variables = dict(global_variables)
     mod_name = global_variables.setdefault('__name__', '<run_path>')
-    mod = sys.modules[mod_name] = imp.new_module(mod_name)
+    spec = importlib.util.spec_from_loader(mod_name, loader=None)
+    mod = sys.modules[mod_name] = importlib.util.module_from_spec(spec)
     mod.__dict__.update(global_variables)
     global_variables = mod.__dict__
     global_variables.setdefault('__file__', file)

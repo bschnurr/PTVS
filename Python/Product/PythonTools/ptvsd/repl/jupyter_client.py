@@ -16,6 +16,8 @@
 
 from __future__ import absolute_import, print_function
 
+from jupyter_client.manager import KernelManager
+
 """Implements REPL support over IPython/ZMQ for VisualStudio"""
 
 __author__ = "Microsoft Corporation <ptvshelp@microsoft.com>"
@@ -40,10 +42,6 @@ try:
 except ImportError:
     raise UnsupportedReplException("Jupyter mode requires the jupyter_client and ipykernel packages. " + traceback.format_exc())
 
-try:
-    import _thread
-except ImportError:
-    import thread as _thread    # legacy name
 
 try:
     from queue import Empty
@@ -226,29 +224,85 @@ class JupyterClientBackend(ReplBackend):
             return self._execution_loop()
         except:
             # TODO: Better fatal error handling
+
             traceback.print_exc()
             try:
-                raw_input()
+                input()
             except NameError:
                 input()
             raise
 
     def _execution_loop(self):
-        km, kc = jupyter_client.manager.start_new_kernel()
         try:
-            self.exit_requested = False
+            km = KernelManager()
+            km.kernel_name = "python3" 
+            # km.shell_port = 0  # Use dynamic port
+            # km.iopub_port = 0
+            # km.stdin_port = 0
+            # km.hb_port = 0
+            km.start_kernel()
+            
+            kc = km.client()
             self.__client = kc
+            try:
+                kc.start_channels()
+            except Exception as e:
+                print(f"Error start_channels: {e}")
+        except Exception as e:
+            print(f"Error initializing kernel with dynamic ports: {e}")
+
+        try:
+            kc.wait_for_ready(timeout=10)  # Wait up to 10 seconds
+            print("Kernel is ready.")
+        except Exception as e:
+            print(f"Kernel didn't start within timelimit: {e}")
+
+        try:
+                      
+            self.exit_requested = False
+            
             self.send_cwd()
 
-            self.__shell_thread = _thread.start_new_thread(self.__shell_threadproc, (kc,))
-            self.__iopub_thread = _thread.start_new_thread(self.__iopub_threadproc, (kc,))
+            # Create and start threads
+            self.__shell_thread = threading.Thread(target=self.__shell_threadproc, args=(kc,), daemon=True)
+            self.__iopub_thread = threading.Thread(target=self.__iopub_threadproc, args=(kc,), daemon=True)
+            self.__shell_thread.start()
+            self.__iopub_thread.start()
+
+            
 
             self.__exit.acquire()
 
             self.send_exit()
+        except zmq.error.ZMQError as e:
+            if "Address in use" in str(e):
+                print("Port conflict detected. Retrying with a dynamic port...")
+                
+        except Exception as e:
+            print(f"Error in kernel execution loop: {e}")
         finally:
-            kc.stop_channels()
-            km.shutdown_kernel(now=True)
+            if self.__client:
+                self.__client.stop_channels()  # Properly stop channels
+            if km:
+                km.shutdown_kernel(now=True)  # Shutdown the kernel
+                if self.__shell_thread:
+                    self.__shell_thread.join()
+                if self.__iopub_thread:
+                    self.__iopub_thread.join()
+
+    def wait_for_kernel_ready(self, timeout=10):
+        start_time = time.time()
+        while True:
+            try:
+                if self.__client is not None:
+                    self.__client.kernel_info()
+                    print("Kernel is ready.")
+                    break
+            except RuntimeError as e:
+                if time.time() - start_time > timeout:
+                    raise TimeoutError("Kernel did not become ready in time.") from e
+                print("Waiting for kernel to be ready...")
+                time.sleep(0.5)  # Wait a bit before retrying
 
     def __command_executed(self, msg):
         if msg.msg_type == 'execute_reply':
@@ -258,15 +312,18 @@ class JupyterClientBackend(ReplBackend):
 
     def run_command(self, command):
         """runs the specified command which is a string containing code"""
-        if self.__client:
-            with self.__lock:
-                self.__exec(command, store_history=True, silent=False).append(self.__command_executed)
-            return True
+        if self.__client is None:
+            raise RuntimeError("Jupyter client is not initialized. in run_command")
+        with self.__lock:
+            self.__exec(command, store_history=True, silent=False).append(self.__command_executed)
+        return True
 
         self.__cmd_buffer.append(command)
         return False
 
     def __exec(self, command, store_history=False, allow_stdin=False, silent=True, get_vars=None):
+        if self.__client is None:
+            raise RuntimeError("Jupyter client is not initialized. in __exec")
         with self.__lock:
             msg_id = self.__client.execute(
                 command,
@@ -344,7 +401,18 @@ class JupyterClientBackend(ReplBackend):
                     break
 
                 try:
-                    m = Message(client.get_shell_msg(timeout=0.1))
+                    # Replace 'block=True' with 'timeout=1.0' and handle Empty exception
+                    m = Message(client.get_shell_msg(timeout=1.0))  # Timeout in seconds
+                except Empty:
+                    # No message received within the timeout
+                    continue
+                except Exception as e:
+                    # Log unexpected errors during message retrieval
+                    print(f"Unexpected error in get_iopub_msg: {e}")
+                    traceback.print_exc()
+                    continue
+
+                try:
                     msg_id = m.msg_id
                     msg_type = m.msg_type
 
@@ -373,17 +441,29 @@ class JupyterClientBackend(ReplBackend):
             # TODO: Better fatal error handling
             traceback.print_exc()
             try:
-                raw_input()
+                input()
             except NameError:
                 input()
             self.exit_process()
 
     def __iopub_threadproc(self, client):
+        """Processes messages from the IOPub channel."""
         try:
             last_exec_count = None
             while not self.exit_requested:
-                m = Message(client.get_iopub_msg(block=True))
+                try:
+                    # Replace 'block=True' with 'timeout=1.0'
+                    m = Message(client.get_iopub_msg(timeout=1.0))  # Timeout in seconds
+                except Empty:
+                    # No message received within the timeout, continue loop
+                    continue
+                except Exception as e:
+                    # Log unexpected errors during message retrieval
+                    print(f"Unexpected error in get_iopub_msg: {e}")
+                    traceback.print_exc()
+                    continue
 
+                # Process the received message
                 if m.parent_header.msg_id in self.__suppress_io:
                     if m.msg_type != 'status':
                         self.__suppress_io.discard(m.parent_header.msg_id)
@@ -402,20 +482,18 @@ class JupyterClientBackend(ReplBackend):
                 elif m.msg_type == 'status':
                     self.__status = m.content['execution_state', 'idle']
                 else:
-                    print("Received: " + m.msg_type + ":" + str(m) + "\n")
+                    print(f"Received: {m.msg_type}: {str(m)}\n")
                     self.write_stdout(str(m) + '\n')
 
-        except zmq.error.ZMQError:
+        except zmq.error.ZMQError as e:
+            print(f"ZMQError encountered: {e}")
             self.exit_process()
         except KeyboardInterrupt:
+            print("KeyboardInterrupt detected, exiting process.")
             self.exit_process()
-        except:
-            # TODO: Better fatal error handling
+        except Exception as e:
+            print(f"Unexpected error: {e}")
             traceback.print_exc()
-            try:
-                raw_input()
-            except NameError:
-                input()
             self.exit_process()
 
     def __write_stream(self, content):
@@ -471,7 +549,7 @@ class JupyterClientBackend(ReplBackend):
             try:
                 if isinstance(output_xaml, str) and sys.version_info[0] >= 3:
                     output_xaml = output_xaml.encode('ascii')
-                self.write_xaml(base64.decodestring(output_xaml))
+                self.write_xaml(base64.b64decode(output_xaml))
                 self.write_stdout('\n')
                 return
             except Exception:
@@ -483,7 +561,7 @@ class JupyterClientBackend(ReplBackend):
             try:
                 if isinstance(output_png, str) and sys.version_info[0] >= 3:
                     output_png = output_png.encode('ascii')
-                self.write_png(base64.decodestring(output_png))
+                self.write_png(base64.b64decode(output_png))
                 self.write_stdout('\n')
                 return
             except Exception:

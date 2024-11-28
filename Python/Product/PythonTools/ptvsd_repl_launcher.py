@@ -23,7 +23,9 @@ __version__ = "3.1.0.0"
 
 import os
 import os.path
+import socket
 import sys
+import threading
 import traceback
 
 def _get_repl():
@@ -113,7 +115,29 @@ def _run_repl():
     # execute code on the main thread which we can interrupt
     backend.execution_loop()    
 
+
+def mock_server(host="127.0.0.1", port=57905):
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind((host, port))
+    server_socket.listen(1)
+    print(f"Mock server running at {host}:{port}")
+
+    conn, addr = server_socket.accept()
+    print(f"Connected by {addr}")
+    while True:
+        data = conn.recv(1024)
+        if not data:
+            break
+        print(f"Received: {data.decode('utf-8')}")
+        conn.sendall(b"OK")  # Echo response
+    conn.close()
+    server_socket.close()
+
+
+
 if __name__ == '__main__':
+    # Start the mock server in a separate thread
+    threading.Thread(target=mock_server, daemon=True).start()
     if getattr(_get_repl(), 'DEBUG', False):
         try:
             _run_repl()
