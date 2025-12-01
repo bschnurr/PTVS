@@ -63,6 +63,7 @@
     <Compile Include="Profiling\CompareReportsWindow.xaml.cs">
       <DependentUpon>CompareReportsWindow.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Profiling\DiagnosticProfilerLauncher.cs" />
     <Compile Include="Profiling\IPythonPerformanceReport.cs" />
     <Compile Include="Profiling\IPythonProfileSession.cs" />
     <Compile Include="Profiling\IPythonProfiling.cs" />

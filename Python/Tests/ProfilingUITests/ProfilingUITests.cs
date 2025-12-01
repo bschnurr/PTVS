@@ -514,7 +514,7 @@ namespace ProfilingUITests {
             CopyAndOpenProject(app, out project, out profiling);
             var projDir = PathUtils.GetParent(project.FullName);
             var session = LaunchProject(app, profiling, project, projDir, false);
-            
+
             try {
                 string reportFilename;
                 WaitForReport(profiling, session, app, out reportFilename);
@@ -1033,12 +1033,12 @@ namespace ProfilingUITests {
             interp.AssertInstalled();
 
             IPythonProfiling profiling = GetProfiling(app);
-                var session = LaunchProcess(app, profiling, interp.InterpreterPath,
-                    Path.Combine(interp.PrefixPath, "Lib", "test", "pystone.py"),
-                    Path.Combine(interp.PrefixPath, "Lib", "test"),
-                    "",
-                    false
-                );
+            var session = LaunchProcess(app, profiling, interp.InterpreterPath,
+                Path.Combine(interp.PrefixPath, "Lib", "test", "pystone.py"),
+                Path.Combine(interp.PrefixPath, "Lib", "test"),
+                "",
+                false
+            );
 
             try {
                 while (profiling.IsProfiling) {
@@ -1127,6 +1127,23 @@ namespace ProfilingUITests {
             BuiltinsProfile(
                 app,
                 PythonPaths.Python37_x64,
+                new[] { "BuiltinsProfile.f", "str.startswith", "isinstance", "marshal.dumps", "array.array.tostring" },
+                new[] { "compile", "exec", "execfile", "_io.TextIOWrapper.read" }
+            );
+        }
+        public void BuiltinsProfilePython39(PythonVisualStudioApp app, ProfileCleanup cleanup, DotNotWaitOnExit optionSetter) {
+            BuiltinsProfile(
+                app,
+                PythonPaths.Python39,
+                new[] { "BuiltinsProfile.f", "str.startswith", "isinstance", "marshal.dumps", "array.array.tostring" },
+                new[] { "compile", "exec", "execfile", "_io.TextIOWrapper.read" }
+            );
+        }
+
+        public void BuiltinsProfilePython39x64(PythonVisualStudioApp app, ProfileCleanup cleanup, DotNotWaitOnExit optionSetter) {
+            BuiltinsProfile(
+                app,
+                PythonPaths.Python39_x64,
                 new[] { "BuiltinsProfile.f", "str.startswith", "isinstance", "marshal.dumps", "array.array.tostring" },
                 new[] { "compile", "exec", "execfile", "_io.TextIOWrapper.read" }
             );

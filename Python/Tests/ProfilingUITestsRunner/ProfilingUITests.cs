@@ -302,6 +302,18 @@ namespace ProfilingUITestsRunner {
 
         [TestMethod, Priority(UITestPriority.P2)]
         [TestCategory("Installed")]
+        public void BuiltinsProfilePython39() {
+            _vs.RunTest(nameof(PUIT.BuiltinsProfilePython39));
+        }
+
+        [TestMethod, Priority(UITestPriority.P2)]
+        [TestCategory("Installed")]
+        public void BuiltinsProfilePython39x64() {
+            _vs.RunTest(nameof(PUIT.BuiltinsProfilePython39x64));
+        }
+
+        [TestMethod, Priority(UITestPriority.P2)]
+        [TestCategory("Installed")]
         public void BuiltinsProfilePython38() {
             _vs.RunTest(nameof(PUIT.BuiltinsProfilePython37));
         }

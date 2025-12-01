@@ -33,7 +33,11 @@ enum PythonVersion {
     PythonVersion_37 = 0x0307,
     PythonVersion_38 = 0x0308,
     PythonVersion_39 = 0x0309,
-    PythonVersion_310 = 0x0310
+    PythonVersion_310 = 0x0310,
+    PythonVersion_311 = 0x0311,
+    PythonVersion_312 = 0x0312,
+    PythonVersion_313 = 0x0313,
+    PythonVersion_314 = 0x0314
 };
 
 struct PythonVersionMajMin {
@@ -100,6 +104,10 @@ static PythonVersion GetPythonVersion(HMODULE hMod) {
         case 8: return PythonVersion_38;
         case 9: return PythonVersion_39;
         case 10: return PythonVersion_310;
+        case 11: return PythonVersion_311;
+        case 12: return PythonVersion_312;
+        case 13: return PythonVersion_313;
+        case 14: return PythonVersion_314;
         }
     }
 

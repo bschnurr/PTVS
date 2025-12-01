@@ -122,16 +122,13 @@ namespace Microsoft.PythonTools.Profiling {
         }
 
         public void StartProfiling(string filename) {
-            StartPerfMon(filename);
+            // Start Diagnostic Tools profiling asynchronously; do not block or call legacy VSPerfMon.
+            Microsoft.VisualStudio.Shell.ThreadHelper.JoinableTaskFactory.RunAsync(async () => {
+                await DiagnosticProfilerLauncher.TryStartProfilingAsync(_exe, _args, _dir, filename).ConfigureAwait(true);
+            }).Task.ContinueWith(t => { var _ = t.Exception; }, System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
 
             _process.EnableRaisingEvents = true;
             _process.Exited += (sender, args) => {
-                try {
-                    // Exited event is fired on a random thread pool thread, we need to handle exceptions.
-                    StopPerfMon();
-                } catch (InvalidOperationException e) {
-                    MessageBox.Show(Strings.UnableToStopPerfMon.FormatUI(e.Message), Strings.ProductTitle);
-                }
                 var procExited = ProcessExited;
                 if (procExited != null) {
                     procExited(this, EventArgs.Empty);
@@ -149,6 +146,7 @@ namespace Microsoft.PythonTools.Profiling {
             string perfMonPath = Path.Combine(perfToolsPath, "VSPerfMon.exe");
 
             if (!File.Exists(perfMonPath)) {
+                // Legacy perf tools not present (VS2022+). Do not throw; profiling will run without VSPerfMon.
                 throw new InvalidOperationException(Strings.CannotLocatePerformanceTools);
             }
 
@@ -172,9 +170,19 @@ namespace Microsoft.PythonTools.Profiling {
         }
 
         private void StopPerfMon() {
-            string perfToolsPath = GetPerfToolsPath();
+            string perfToolsPath;
+            try {
+                perfToolsPath = GetPerfToolsPath();
+            } catch (InvalidOperationException) {
+                // Legacy perf tools not present; nothing to stop.
+                return;
+            }
 
             string perfMonPath = Path.Combine(perfToolsPath, "VSPerfCmd.exe");
+            if (!File.Exists(perfMonPath)) {
+                // Legacy perf tools not present; nothing to stop.
+                return;
+            }
 
             using (var p = ProcessOutput.RunHiddenAndCapture(perfMonPath, "/shutdown")) {
                 p.Wait();

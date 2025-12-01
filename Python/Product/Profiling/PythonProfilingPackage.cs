@@ -328,11 +328,15 @@ namespace Microsoft.PythonTools.Profiling {
 
             string baseName = Path.GetFileNameWithoutExtension(session.Filename);
             string date = DateTime.Now.ToString("yyyyMMdd");
-            string outPath = Path.Combine(Path.GetTempPath(), baseName + "_" + date + ".vsp");
+            // Prefer modern Diagnostic Tools session file on VS2022+; otherwise use legacy .vsp
+            var pkg = (PythonProfilingPackage)session._serviceProvider.GetService(typeof(PythonProfilingPackage));
+            var useDiagSession = pkg != null && pkg.IsProfilingInstalled();
+            var outExt = useDiagSession ? ".diagsession" : ".vsp";
+            string outPath = Path.Combine(Path.GetTempPath(), baseName + "_" + date + outExt);
 
             int count = 1;
             while (File.Exists(outPath)) {
-                outPath = Path.Combine(Path.GetTempPath(), baseName + "_" + date + "(" + count + ").vsp");
+                outPath = Path.Combine(Path.GetTempPath(), baseName + "_" + date + "(" + count + ")" + outExt);
                 count++;
             }
 
