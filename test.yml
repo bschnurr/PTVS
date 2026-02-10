@@ -16,7 +16,7 @@ pool:
   name: VSEngSS-MicroBuild2022-1ES
   demands: 
   - msbuild
-  - VisualStudio_17.0
+  - VisualStudio_18.0
 
 variables:
   ORGANIZATION: 'DevDiv'
