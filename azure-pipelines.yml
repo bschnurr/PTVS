@@ -121,10 +121,6 @@ variables:
   # Import variables from PTVS-Dev18 variable group
   - group: PTVS-Dev18
 
-  # Override MsBuildVersion until MSBuild 18.0 is available on pool agents
-  - name: MsBuildVersion
-    value: latest
-
 # The `resources` specify the location and version of the 1ES PT.
 # The ref of the repository is set to release tag which is intended to be used by most pipelines.
 resources:
