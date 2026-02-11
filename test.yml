@@ -13,7 +13,7 @@ pr:
   none
 
 pool:
-  name: VSEngSS-MicroBuild2022-1ES
+  name: VSEng-MicroBuildVSStable
   demands: 
   - msbuild
   - VisualStudio_18.0

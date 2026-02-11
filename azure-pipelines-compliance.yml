@@ -35,7 +35,7 @@ jobs:
 
   # The agent pool the build will run on
   pool:
-    name: VSEngSS-MicroBuild2022-1ES
+    name: VSEng-MicroBuildVSStable
     demands: 
     - msbuild
     - VisualStudio_18.0

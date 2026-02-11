@@ -137,7 +137,7 @@ extends:
     # specify the image type. Here are the allowed values: windows, linux, or macOS. The default value is windows. 
     # Hence, this property must be specified for linux and macOS.
     pool:
-      name: VSEngSS-MicroBuild2022-1ES
+      name: VSEng-MicroBuildVSStable
       os: windows
     featureFlags:
       # Consolidate SDL pre-check tasks into a single step to reduce pipeline overhead
