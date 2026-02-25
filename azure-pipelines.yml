@@ -362,6 +362,13 @@ extends:
           # install microbuild plugins needed for signing
           - template: /Build/templates/install_microbuild_plugins.yml@self
 
+          # Restore packages (needed for MicroBuild.Core NuGet package used by signing)
+          - template: /Build/templates/restore_packages.yml@self
+            parameters:
+              pylanceVersion: ${{ parameters.pylanceVersion }}
+              pylanceReleaseType: ${{ variables.pylanceReleaseTypeVar }}
+              debugpyVersion: ${{ parameters.debugpyVersion }}
+
           # Download binaries from the build job
           - download: current
             artifact: Binaries
