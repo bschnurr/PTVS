@@ -194,6 +194,11 @@ extends:
             targetPath: '$(Build.SourcesDirectory)/Python/Tests/TestData/default.runsettings'
             artifactName: 'RunSettings'
             sbomEnabled: false
+          - ${{ if or(notin(variables['Build.Reason'], 'PullRequest'), eq(variables['PublishNugetPackageAsBuildArtifact'], true)) }}:
+            - output: pipelineArtifact
+              displayName: 'Publish build artifact: NuGet Package'
+              targetPath: '$(Build.ArtifactStagingDirectory)\pkg'
+              artifactName: pkg
 
         steps:
 
@@ -201,6 +206,8 @@ extends:
         - checkout: self
           clean: true
           fetchDepth: 1
+        # Non-PR steps  
+        - ${{ if notin(variables['Build.Reason'], 'PullRequest') }}:
 
         # add VSTarget build tag
         - powershell: 'Write-Host "##vso[build.addbuildtag]$env:VSTarget"'
