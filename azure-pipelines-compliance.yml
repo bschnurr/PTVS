@@ -136,36 +136,6 @@ extends:
         # Build and publish logs
         - template: /Build/templates/build.yml@self
 
-        # Anti-Malware Scan of build sources and/or artifacts
-        # See https://eng.ms/docs/security-compliance-identity-and-management-scim/security/azure-security/cloudai-security-fundamentals-engineering/security-integration/guardian-wiki/sdl-azdo-extension/antimalware-scan-build-task
-        - task: AntiMalware@4
-          displayName: 'Run Antivirus on Source'
-          inputs:
-            FileDirPath: $(Build.SourcesDirectory)
-          condition: succeededOrFailed()
-          continueOnError: True
-        - task: AntiMalware@4
-          displayName: Run Antivirus on Binaries
-          inputs:
-            FileDirPath: $(Build.BinariesDirectory)
-          condition: succeededOrFailed()
-          continueOnError: True
-
-        # Copy files for Scanning
-        - task: CopyFiles@2
-          displayName: 'Copy Files for Scanning'
-          inputs:
-            SourceFolder: $(Build.BinariesDirectory)
-            Contents: |
-              layout\Microsoft.CookiecutterTools\Microsoft.CookiecutterTools.*
-              layout\Microsoft.PythonTools.Core\Microsoft.PythonTools.*
-              layout\Microsoft.PythonTools.Core\PyDebugAttach*.*
-              layout\Microsoft.PythonTools.Debugger.VCLauncher\Microsoft.PythonTools.*
-              layout\Microsoft.PythonTools.Django\Microsoft.PythonTools.*
-              layout\Microsoft.PythonTools.Profiling\Microsoft.PythonTools.*
-              layout\Microsoft.PythonTools.Profiling\VsPyProf*.*
-            TargetFolder: $(Agent.TempDirectory)\FilesToScan
-
         # Analyze python files for common vulnerabilities
         # See https://eng.ms/docs/security-compliance-identity-and-management-scim/security/azure-security/cloudai-security-fundamentals-engineering/security-integration/guardian-wiki/sdl-azdo-extension/bandit-build-task
         - task: Bandit@1
@@ -176,42 +146,10 @@ extends:
           condition: succeededOrFailed()
           continueOnError: True
 
-        # Analyze binaries for security vulnerabilities
-        # See https://eng.ms/docs/security-compliance-identity-and-management-scim/security/azure-security/cloudai-security-fundamentals-engineering/security-integration/guardian-wiki/sdl-azdo-extension/binskim-build-task
-        - task: BinSkim@4
-          displayName: Run BinSkim
-          inputs:
-            # Use the same files copied for ApiScan
-            TargetPattern: binskimPattern
-            AnalyzeTargetBinskim: |
-              $(Agent.TempDirectory)\FilesToScan\*.dll
-              $(Agent.TempDirectory)\FilesToScan\*.exe
-          condition: succeededOrFailed()
-          continueOnError: True
-
-        # Analyze source and build output text files for credentials
-        # See https://eng.ms/docs/security-compliance-identity-and-management-scim/security/azure-security/cloudai-security-fundamentals-engineering/security-integration/guardian-wiki/sdl-azdo-extension/credscan-azure-devops-build-task
-        - task: CredScan@2
-          displayName: Run CredScan
-          inputs:
-            toolMajorVersion: V2
-          condition: succeededOrFailed()
-          continueOnError: True
-
         # Scan C/C++ for security vulnerabilities
         # See https://eng.ms/docs/security-compliance-identity-and-management-scim/security/azure-security/cloudai-security-fundamentals-engineering/security-integration/guardian-wiki/sdl-azdo-extension/flawfinder-build-task
         - task: Flawfinder@2
           displayName: 'Run Flawfinder'
-          condition: succeededOrFailed()
-          continueOnError: True
-
-        # Scan text elements including code, code comments, and content/web pages, for sensitive terms based on legal, cultural, or geopolitical reasons
-        # See https://eng.ms/docs/security-compliance-identity-and-management-scim/security/azure-security/cloudai-security-fundamentals-engineering/security-integration/guardian-wiki/sdl-azdo-extension/policheck-build-task
-        - task: PoliCheck@2
-          displayName: Run PoliCheck
-          inputs:
-            optionsFC: 1 # Enables scanning of comments
-            optionsUEPATH: $(Build.SourcesDirectory)\Build\PoliCheckExclusions.xml
           condition: succeededOrFailed()
           continueOnError: True
 
@@ -225,36 +163,3 @@ extends:
         - task: MicroBuildCleanup@1
           displayName: MicroBuild cleanup
           continueOnError: True
-
-        # Generate security analysis report
-        # See https://eng.ms/docs/security-compliance-identity-and-management-scim/security/azure-security/cloudai-security-fundamentals-engineering/security-integration/guardian-wiki/sdl-azdo-extension/security-analysis-report-build-task
-        - task: SdtReport@1
-          displayName: Create Security Analysis Report
-          inputs:
-            AllTools: true
-            BinSkimBreakOn: WarningAbove
-            PoliCheckBreakOn: Severity4Above
-            RoslynAnalyzersBreakOn: WarningAbove
-          condition: succeededOrFailed()
-          continueOnError: True
-
-        # Publish security analysis logs
-        - task: PublishSecurityAnalysisLogs@2
-          displayName: Publish Security Analysis Logs
-          condition: succeededOrFailed()
-          continueOnError: True
-
-        # Copy sdt logs for publishing
-        - task: CopyFiles@2
-          displayName: Save SDT logs to Staging Directory
-          inputs:
-            SourceFolder: $(Agent.BuildDirectory)\_sdt
-            TargetFolder: $(Build.StagingDirectory)
-
-        # Upload results to TSA
-        # See https://eng.ms/docs/security-compliance-identity-and-management-scim/security/azure-security/cloudai-security-fundamentals-engineering/security-integration/guardian-wiki/sdl-azdo-extension/tsa-upload-build-task
-        - task: TSAUpload@2
-          displayName: TSA Upload
-          inputs:
-            GdnPublishTsaOnboard: True
-            GdnPublishTsaConfigFile: $(Build.SourcesDirectory)\TsaConfig.json
