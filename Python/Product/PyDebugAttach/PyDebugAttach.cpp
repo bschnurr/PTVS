@@ -21,6 +21,7 @@
 #include "PyDebugAttach.h"
 #include "..\VsPyProf\python.h"
 #include <algorithm>
+#include <chrono>
 
 // _Always_ is not defined for all versions, so make it a no-op if missing.
 #ifndef _Always_
@@ -896,10 +897,8 @@ bool DoAttach(HMODULE module, ConnectionInfo& connInfo, bool isDebug) {
                 addedPendingCall = true;
             }
 
-#define TICKS_DIFF(prev, cur) ((cur) >= (prev)) ? ((cur)-(prev)) : ((0xFFFFFFFF-(prev))+(cur)) 
-            const DWORD ticksPerSecond = 1000;
-
-            ULONGLONG startTickCount = GetTickCount64();
+            const auto timeout = chrono::seconds(20);
+            auto startTime = chrono::steady_clock::now();
             do {
                 SuspendThreads(suspendedThreads, addPendingCall, threadsInited);
 
@@ -953,7 +952,7 @@ bool DoAttach(HMODULE module, ConnectionInfo& connInfo, bool isDebug) {
                 }
                 ResumeThreads(suspendedThreads);
             } while (!threadsInited() &&
-                (TICKS_DIFF(startTickCount, GetTickCount64())) < (ticksPerSecond * 20) &&
+                (chrono::steady_clock::now() - startTime) < timeout &&
                 !addedPendingCall);
 
             if (!threadsInited()) {

@@ -49,7 +49,6 @@ except ImportError:
     # Python >= 3.12 - imp module was removed
     new_module = types.ModuleType
 import traceback
-import random
 import os
 import inspect
 from collections import deque
@@ -1325,4 +1324,3 @@ if sys.platform == 'cli':
             return System.Text.Encoding.UTF8
 
 BACKEND = None
-
