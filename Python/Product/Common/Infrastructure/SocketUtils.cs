@@ -19,11 +19,10 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.ExceptionServices;
+using System.Security.Cryptography;
 
 namespace Microsoft.PythonTools.Infrastructure {
     static class SocketUtils {
-        private static readonly Random _freePortRandom = new Random();
-
         public static TcpListener GetRandomPortListener(IPAddress address, out int port, int minimumPort = 49152, int maximumPort = 65536, bool randomStart = true) {
             ExceptionDispatchInfo edi = null;
             int range = maximumPort - minimumPort;
@@ -31,7 +30,7 @@ namespace Microsoft.PythonTools.Infrastructure {
                 throw new ArgumentException("maximumPort must be larger than minimumPort");
             }
 
-            int start = randomStart ? _freePortRandom.Next(range) : 0;
+            int start = randomStart ? GetRandomInt32(range) : 0;
             for (int i = 0; i < range; ++i) {
                 port = (i + start) % range + minimumPort;
                 Debug.Assert(port >= minimumPort && port <= maximumPort);
@@ -46,6 +45,22 @@ namespace Microsoft.PythonTools.Infrastructure {
             }
             edi?.Throw();
             throw new InvalidOperationException("No free ports");
+        }
+
+        private static int GetRandomInt32(int exclusiveUpperBound) {
+            using (var rng = RandomNumberGenerator.Create()) {
+                var bytes = new byte[sizeof(uint)];
+                ulong limit = uint.MaxValue + 1UL;
+                limit -= limit % (uint)exclusiveUpperBound;
+
+                uint value;
+                do {
+                    rng.GetBytes(bytes);
+                    value = BitConverter.ToUInt32(bytes, 0);
+                } while ((ulong)value >= limit);
+
+                return (int)(value % (uint)exclusiveUpperBound);
+            }
         }
 
     }
