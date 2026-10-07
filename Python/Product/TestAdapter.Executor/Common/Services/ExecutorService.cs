@@ -146,7 +146,9 @@ namespace Microsoft.PythonTools.TestAdapter.Services {
             if (debugMode == PythonDebugMode.PythonOnly) {
                 if (projectSettings.UseLegacyDebugger) {
                     var secretBuffer = new byte[24];
-                    RandomNumberGenerator.Create().GetNonZeroBytes(secretBuffer);
+                    using (var rng = RandomNumberGenerator.Create()) {
+                        rng.GetNonZeroBytes(secretBuffer);
+                    }
                     debugSecret = Convert.ToBase64String(secretBuffer)
                                         .Replace('+', '-')
                                         .Replace('/', '_')
